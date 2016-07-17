@@ -30,6 +30,11 @@ from tensorflow.python.ops import gen_math_ops
 from tensorflow.python.ops import math_ops
 
 
+# Gradient ops that do not have gradients themselves.
+ops.NoGradient("SigmoidGrad")
+ops.NoGradient("TanhGrad")
+
+
 def _safe_shape_div(x, y):
   """Divides `x / y` assuming `x, y >= 0`, treating `0 / 0 = 0`."""
   return x // math_ops.maximum(y, 1)
@@ -832,3 +837,26 @@ def _CrossGrad(op, grad):
   u = op.inputs[0]
   v = op.inputs[1]
   return (math_ops.cross(v, grad), math_ops.cross(grad, u))
+
+
+@ops.RegisterGradient("Cumsum")
+def _CumsumGrad(op, grad):
+  axis = op.inputs[1]
+  exclusive = op.get_attr("exclusive")
+  reverse = op.get_attr("reverse")
+  return [math_ops.cumsum(grad, axis, exclusive=exclusive,
+                          reverse=not reverse), None]
+
+
+@ops.RegisterGradient("Cumprod")
+def _CumprodGrad(op, grad):
+  x = op.inputs[0]
+  axis = op.inputs[1]
+  exclusive = op.get_attr("exclusive")
+  reverse = op.get_attr("reverse")
+
+  # TODO This fails when x contains 0 and should be fixed
+  prod = math_ops.cumprod(x, axis, exclusive=exclusive, reverse=reverse)
+  out = math_ops.cumsum(prod * grad, axis, exclusive=exclusive,
+                        reverse=not reverse)
+  return [out / x, None]
